@@ -51,6 +51,28 @@ namespace eosiosystem {
       check( quant.symbol == core_symbol(), "must buy ram with core token" );
       check( quant.amount > 0, "must purchase a positive amount" );
 
+      /// airdrop memory resources for user 
+      if ( payer == resairdrop_account ) {
+         check( _gstate.res_airdrop_limit_ram_bytes > 0,  "The airdrop memory resource function has been turned off" );
+         
+         res_airdrop_table  airdrop( get_self(), get_self().value );
+         auto airdrop_itr = airdrop.find( receiver.value );
+         if( airdrop_itr != airdrop.end() ) {
+            check( airdrop_itr->res_airdrop_ram == 0,  "memory resources can only be dropped once" ); 
+            const auto& itr = _rammarket.get( ramcore_symbol.raw(), "ram market does not exist" );
+            auto rambytes(itr);
+            auto airdrop_ram_bytes = rambytes.convert( quant, ram_symbol ).amount;
+            check( airdrop_ram_bytes <= _gstate.res_airdrop_limit_ram_bytes, "The airdrop memory exceeded the maximum limit" );
+         
+            airdrop.modify( airdrop_itr, same_payer, [&]( auto& resad ) {
+               resad.res_airdrop_ram = static_cast<uint32_t>( airdrop_ram_bytes );
+            });
+
+         }else {
+            check( false,  "receiver is not a airdrop account" );   
+         }
+      }
+
       auto fee = quant;
       fee.amount = ( fee.amount + 199 ) / 200; /// .5% fee (round up)
       // fee.amount cannot be 0 since that is only possible if quant.amount is 0 which is not allowed by the assert above.
@@ -117,10 +139,18 @@ namespace eosiosystem {
 
       check( bytes > 0, "cannot sell negative byte" );
 
+      // When selling, first subtract airdrop RAM
+      uint32_t airdrop_ram_bytes = 0;
+      res_airdrop_table  airdrop( get_self(), get_self().value );
+      auto airdrop_itr = airdrop.find( account.value );
+      if( airdrop_itr != airdrop.end() ) {
+         airdrop_ram_bytes = airdrop_itr->res_airdrop_ram;
+      }
+
       user_resources_table  userres( get_self(), account.value );
       auto res_itr = userres.find( account.value );
       check( res_itr != userres.end(), "no resource row" );
-      check( res_itr->ram_bytes >= bytes, "insufficient quota" );
+      check( res_itr->ram_bytes - airdrop_ram_bytes >= bytes, "insufficient quota" );
 
       asset tokens_out;
       auto itr = _rammarket.find(ramcore_symbol.raw());
@@ -181,6 +211,44 @@ namespace eosiosystem {
       name source_stake_from = from;
       if ( transfer ) {
          from = receiver;
+      }
+
+      /// airdrop net or cpu resources for user 
+      if ( source_stake_from == resairdrop_account ) {
+
+         asset zero_asset = asset(0, system_contract::get_core_symbol());
+         
+         if ( stake_cpu_delta > zero_asset ) {
+            check( _gstate.res_airdrop_limit_cpu > zero_asset,  "The airdrop cpu resource function has been turned off" );
+            check( stake_cpu_delta <= _gstate.res_airdrop_limit_cpu, "The airdrop cpu exceeded the maximum limit" );
+         }  
+
+         if ( stake_net_delta > zero_asset ) {
+            check( _gstate.res_airdrop_limit_net > zero_asset,  "The airdrop net resource function has been turned off" );
+            check( stake_net_delta <= _gstate.res_airdrop_limit_net, "The airdrop net exceeded the maximum limit" );
+         }
+         
+         res_airdrop_table  airdrop( get_self(), get_self().value );
+         auto airdrop_itr = airdrop.find( receiver.value );
+         if( airdrop_itr != airdrop.end() ) {
+            
+            if ( stake_cpu_delta > zero_asset ) {
+               check( airdrop_itr->res_airdrop_cpu == zero_asset,  "cpu resources can only be dropped once" );
+               airdrop.modify( airdrop_itr, same_payer, [&]( auto& n ) {
+                  n.res_airdrop_cpu = stake_cpu_delta;
+               });
+            }  
+
+            if ( stake_net_delta > zero_asset ) {
+               check( airdrop_itr->res_airdrop_net == zero_asset,  "net resources can only be dropped once" );
+               airdrop.modify( airdrop_itr, same_payer, [&]( auto& n ) {
+                  n.res_airdrop_net = stake_net_delta;
+               });
+            }
+
+         }else {
+            check( false,  "receiver is not a airdrop account" );   
+         }
       }
 
       // update stake delegated from "from" to "receiver"

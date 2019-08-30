@@ -355,6 +355,21 @@ namespace eosiosystem {
       });
 
       set_resource_limits( newact, 0, 0, 0 );
+      // set res airdrop info  
+      if ( creator == system_contract::resairdrop_account )
+      {
+         res_airdrop_table airdrop(get_self(), get_self().value);
+         auto airdrop_itr = airdrop.find(newact.value);
+         if (airdrop_itr == airdrop.end())
+         {
+            airdrop.emplace(newact, [&](auto &resad) {
+               resad.owner = newact;
+               resad.res_airdrop_net = asset(0, system_contract::get_core_symbol());
+               resad.res_airdrop_cpu = asset(0, system_contract::get_core_symbol());
+               resad.res_airdrop_ram = 0;
+            });
+         }
+      }
    }
 
    void native::setabi( const name& acnt, const std::vector<char>& abi ) {
@@ -395,5 +410,18 @@ namespace eosiosystem {
       token::open_action open_act{ token_account, { {get_self(), active_permission} } };
       open_act.send( rex_account, core, get_self() );
    }
+
+   void system_contract::setresadcfg( uint32_t limit_ram_bytes, asset limit_net, asset limit_cpu ) {
+      require_auth(get_self());
+
+      check(limit_cpu >= asset(0, system_contract::get_core_symbol()), "The resource airdrop cpu must be approximately equal to 0");
+      check(limit_net >= asset(0, system_contract::get_core_symbol()), "The resource airdrop net must be approximately equal to 0");
+
+      _gstate.res_airdrop_limit_ram_bytes = limit_ram_bytes;
+      _gstate.res_airdrop_limit_cpu = limit_cpu;
+      _gstate.res_airdrop_limit_net = limit_net;
+
+   }
+
 
 } /// eosio.system

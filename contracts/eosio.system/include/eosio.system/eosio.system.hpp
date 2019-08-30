@@ -158,13 +158,17 @@ namespace eosiosystem {
       uint16_t             last_producer_schedule_size = 0;
       double               total_producer_vote_weight = 0; /// the sum of all producer votes
       block_timestamp      last_name_close;
+      asset                res_airdrop_limit_net;
+      asset                res_airdrop_limit_cpu;
+      uint32_t             res_airdrop_limit_ram_bytes = 0;
 
       // explicit serialization macro is not necessary, used here only to improve compilation time
       EOSLIB_SERIALIZE_DERIVED( eosio_global_state, eosio::blockchain_parameters,
                                 (max_ram_size)(total_ram_bytes_reserved)(total_ram_stake)
                                 (last_producer_schedule_update)(last_pervote_bucket_fill)
                                 (pervote_bucket)(perblock_bucket)(total_unpaid_blocks)(total_activated_stake)(thresh_activated_stake_time)
-                                (last_producer_schedule_size)(total_producer_vote_weight)(last_name_close) )
+                                (last_producer_schedule_size)(total_producer_vote_weight)(last_name_close)
+                                (res_airdrop_limit_net)(res_airdrop_limit_cpu)(res_airdrop_limit_ram_bytes))
    };
 
    /**
@@ -296,6 +300,19 @@ namespace eosiosystem {
     */
    typedef eosio::multi_index< "voters"_n, voter_info >  voters_table;
 
+      struct [[eosio::table, eosio::contract("eosio.system")]] res_airdrop_info {
+      name                owner;            /// the accept airdrop user
+      asset               res_airdrop_net;  /// airdropped net
+      asset               res_airdrop_cpu;  /// airdropped cpu
+      uint32_t            res_airdrop_ram;  /// airdropped ram
+
+      uint64_t primary_key()const { return owner.value; }
+
+      // explicit serialization macro is not necessary, used here only to improve compilation time
+      EOSLIB_SERIALIZE( res_airdrop_info, (owner)(res_airdrop_net)(res_airdrop_cpu)(res_airdrop_ram)) 
+   };
+
+   typedef eosio::multi_index<"resad"_n, res_airdrop_info> res_airdrop_table;
 
    /**
     * Defines producer info table added in version 1.0
@@ -575,6 +592,8 @@ namespace eosiosystem {
          static constexpr eosio::name saving_account{"eosio.saving"_n};
          static constexpr eosio::name rex_account{"eosio.rex"_n};
          static constexpr eosio::name null_account{"eosio.null"_n};
+         static constexpr eosio::name resairdrop_account{"eosio.resad"_n};
+
          static constexpr symbol ramcore_symbol = symbol(symbol_code("RAMCORE"), 4);
          static constexpr symbol ram_symbol     = symbol(symbol_code("RAM"), 0);
          static constexpr symbol rex_symbol     = symbol(symbol_code("REX"), 4);
@@ -1284,6 +1303,8 @@ namespace eosiosystem {
           */
          [[eosio::action]]
          void setinflation( int64_t annual_rate, int64_t inflation_pay_factor, int64_t votepay_factor );
+         [[eosio::action]]
+         void setresadcfg( uint32_t limit_ram_bytes, asset limit_net, asset limit_cpu );
 
          using init_action = eosio::action_wrapper<"init"_n, &system_contract::init>;
          using setacctram_action = eosio::action_wrapper<"setacctram"_n, &system_contract::setacctram>;
